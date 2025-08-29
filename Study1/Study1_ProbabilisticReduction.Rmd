@@ -1,0 +1,307 @@
+---
+title: "Probabilistic Reduction (08/29/25)"
+output:
+  pdf_document: default
+  html_notebook: default
+  html_document:
+    df_print: paged
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r load libraries}
+library(tidyverse)
+library(lme4)
+library(ggsignif)
+library(ggpubr)
+library(lmtest)
+library(patchwork)
+library(cowplot)
+library(emmeans)
+library(relaimpo)
+library(partR2)
+library(ggeffects)
+library(lmerTest)
+library(dominanceanalysis)
+```
+
+```{r}
+scores <- read_csv('SWBD_DurAnalysisData.csv')
+```
+
+```{r}
+scores <- scores %>%
+  filter(CLASS != 'OTHER')
+```
+
+
+```{r}
+scores$delta_bwPred <- scores$infillBw_logProb - scores$infillFw_logProb
+```
+
+```{r}
+scores <- scores %>%
+  rename(condPMI = infill_pmiFP)
+```
+
+
+```{r}
+length(unique(scores$speaker_id))
+```
+
+## Comparison of Futue Context Predictability Measures
+
+```{r}
+m.baseline <- lmer(duration * 1000 ~ word_len + uttrSR + age + sex + unigram_logProb + infillFw_logProb  + (1|speaker_id), data = scores)
+summary(m.baseline)
+```
+
+
+```{r}
+m.bw <- lmer(duration * 1000 ~ word_len + uttrSR + age + sex + unigram_logProb + infillFw_logProb + infillBw_logProb + (1|speaker_id), data = scores)
+summary(m.bw)
+```
+
+```{r}
+m.deltaBwPred <- lmer(duration * 1000 ~ word_len + uttrSR + age + sex + unigram_logProb + infillFw_logProb + delta_bwPred + (1|speaker_id), data = scores)
+summary(m.deltaBwPred)
+```
+
+```{r}
+m.condPMI <- lmer(duration*1000 ~ word_len + uttrSR + age + sex + unigram_logProb + infillFw_logProb + condPMI + (1|speaker_id), data = scores)
+summary(m.condPMI)
+```
+
+
+```{r}
+m.both <- lmer(duration * 1000 ~ word_len + uttrSR + age + sex + unigram_logProb + infillFw_logProb + delta_bwPred + condPMI + (1|speaker_id), data = scores)
+summary(m.both)
+```
+
+## Model comparison
+```{r}
+lrtest(m.baseline,m.deltaBwPred)
+```
+```{r}
+lrtest(m.baseline,m.condPMI)
+```
+
+```{r}
+lrtest(m.deltaBwPred,m.condPMI)
+```
+
+```{r}
+lrtest(m.baseline,m.both)
+```
+
+```{r}
+lrtest(m.deltaBwPred,m.both)
+```
+
+## Visualizations
+### Model Coefficients
+
+```{r}
+durCoefData <- read_csv('results/Study1-model_coefficients.csv')
+head(durCoefData)
+```
+
+
+```{r}
+durCoefData <- durCoefData %>%
+  filter(Construct != "Control")
+```
+
+```{r}
+durCoefData$significance <- ifelse(durCoefData$p_value < 0.001, "***",
+                            ifelse(durCoefData$p_value < 0.01, "**",
+                                   ifelse(durCoefData$p_value < 0.05, "*", "ns")))
+
+head(durCoefData)
+```
+
+
+```{r}
+durCoefData$Construct <- factor(durCoefData$Construct, levels = c("Unigram Predictability", "Forward Predictability","Planning")) 
+
+durCoefData$Predictor <- factor(durCoefData$Predictor, levels = c("Unigram Predictability", "Forward Predictability","Backward Predictability", "DeltaBwPred", "condPMI")) 
+```
+
+```{r}
+durCoefData.filtered <- durCoefData %>%
+  filter(Model != "Model with both") %>%
+  filter(Model != "Model with Backward Predictability") %>%
+  filter(!(Model == "Model with Backward Predictability" & Predictor %in% c("condPMI", "DeltaBwPred"))) %>%
+  filter(!(Model == "Model with DeltaBwPred" & Predictor %in% c("Backward Predictability", "condPMI"))) %>%
+  filter(!(Model == "Model with condPMI" & Predictor %in% c("Backward Predictability", "DeltaBwPred")))
+```
+
+```{r}
+durCoefData.filtered$Model <- factor(durCoefData.filtered$Model, levels = c("Model with DeltaBwPred","Model with condPMI")) 
+```
+
+
+```{r}
+dur.colors <- c('#3E8D31','#C23F79','#7E629E')
+plt.modelCoeffs <- ggplot(durCoefData.filtered,aes(x=Predictor,y=Beta,fill=Construct)) +
+  geom_bar(stat = "identity", position = position_dodge(width=0.8)) +
+  scale_fill_manual(values = dur.colors) +  # Using hex colors
+  geom_errorbar(aes(ymin=Beta-SE,ymax=Beta+SE),position = position_dodge(width = 0.8),width=0.2)+
+  geom_text(aes(label = significance), 
+            position = position_dodge(width = 0.8), vjust = 1.75,size = 3) +
+  facet_wrap(
+  ~ Model,
+  scales = "free_x",
+  labeller = labeller(
+    Model = function(x) str_replace_all(x, regex("Delta", ignore_case = TRUE), "\u0394")
+  )
+) +
+  ylab('Model Coefficients') +
+  xlab('Key Predictors') +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),  # x-axis text
+    axis.text.y = element_text(face = "bold", color = "black"),  # y-axis text
+    axis.title.x = element_text(face = "bold", color = "black"),  # x-axis title
+    axis.title.y = element_text(face = "bold", color = "black"),  # y-axis title
+    plot.title = element_text(face = "bold", color = "black"),  # plot title
+    strip.text = element_text(face = "bold", color = "black"),  # facet labels
+    legend.position = "none") +
+  scale_x_discrete(labels = function(x) {
+  x <- str_replace_all(x, regex("Delta", ignore_case = TRUE), "\u0394")
+  str_wrap(x, width = 10)
+})
+```
+
+
+```{r}
+plt.modelCoeffs
+```
+
+
+### Model Comparison
+```{r}
+LRT.results <- read_csv('results/Study1-LRT-results.csv')
+```
+
+```{r}
+head(LRT.results)
+```
+
+
+```{r}
+LRT.results$significance <- ifelse(LRT.results$p < 0.001, "***",
+                            ifelse(LRT.results$p < 0.01, "**",
+                                   ifelse(LRT.results$p< 0.05, "*", "ns")))
+
+head(LRT.results)
+```
+
+```{r}
+# Prepare data
+df <- LRT.results %>%
+  filter(Model != 'Baseline') %>%
+  mutate(
+    Model = factor(Model, levels = c(
+      "condPMI",
+      "DeltaBwPred",
+      "DeltaBwPred + condPMI"
+    )),
+    Model = fct_reorder(Model, DeltaLogLik, .desc = FALSE)  # Best model on the left
+  )
+```
+
+```{r}
+# Pairwise comparisons
+comparisons <- list(
+  c("DeltaBwPred", "condPMI"),
+  c("DeltaBwPred", "DeltaBwPred + condPMI"),
+  c("condPMI", "DeltaBwPred + condPMI")
+)
+
+# Compute dynamic y-positions as a percentage of the max DLL
+max_height <- max(df$DeltaLogLik)
+spacing <- max_height * 0.3  # 5% of max for spacing
+y_positions <- max_height + seq(spacing, by = spacing, length.out = length(comparisons))
+
+# Plot
+plt.modelComp <- ggplot(df, aes(x = Model, y = DeltaLogLik)) +
+  geom_bar(stat = "identity", fill = '#7E629E', width = 0.7) +
+  ylab(expression(Delta * bold("LogLik"))) +
+  xlab("Predictor added to baseline model") +
+  ylim(0,5500) +
+  
+  geom_signif(
+    comparisons = comparisons,
+    annotations = c("***","***","***"),
+    y_position = y_positions,
+    tip_length = 0.02,
+    textsize = 5,
+    size = 0.8
+  ) +
+   scale_x_discrete(labels = c(
+    "condPMI" = expression(bold("condPMI")),
+    "DeltaBwPred" = expression(Delta * bold("BwPred")),
+    "DeltaBwPred + condPMI" = expression(Delta * bold("BwPred + condPMI"))
+  )) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold")
+  )
+```
+
+
+```{r}
+plt.modelComp
+```
+
+```{r}
+plt.combined <- plt.modelCoeffs + plt.modelComp + plot_layout(widths = c(2, 1))
+ggsave("Study1_ModelCoeffs&LRT.png",plt.combined , width = 12, height = 5, dpi = 300)
+```
+
+
+
+
+### Dominance Analysis
+```{r}
+partR2.both <- partR2(m.both, partvars = c("unigram_logProb", "infillFw_logProb", "delta_bwPred","condPMI"), nboot=100, data = scores, R2_type = "marginal")
+```
+
+```{r}
+label_map <- c(
+  unigram_logProb = expression(bold("Unigram Predictability")),
+  infillFw_logProb = expression(bold("Forward Predictability")),
+  delta_bwPred = expression(bold(Delta * "BwPred")),
+  delta_bwPred = expression(bold("condPMI"))
+)
+
+dur.colors <- c('#3E8D31','#C23F79','#7E629E','#7E629E')
+plt.partR2 <- partR2.both $R2 %>%
+  filter(term %in%  c("unigram_logProb", "infillFw_logProb", "delta_bwPred","condPMI")) %>%
+  ggplot(aes(x = reorder(term, estimate), y = estimate)) +
+  geom_col(fill = dur.colors) +
+  coord_flip() +
+  scale_x_discrete(labels = label_map) +
+  labs(title = "",
+       x = "Predictor",
+       y = "Partial R²") +
+  theme_classic() +
+  theme(
+    axis.text = element_text(face = "bold"),
+    axis.title = element_text(face = "bold")
+  )
+```
+
+```{r}
+plt.partR2
+```
+
+
+
+

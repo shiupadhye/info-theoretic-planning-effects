@@ -1,0 +1,5 @@
+﻿Model,ModelLogLik,DeltaLogLik,chisq,p
+Baseline,-3899519,0,0,0
+DeltaBwPred,-3896967,2552,5103.9,2.20E-16
+condPMI,-3898957,562,1123.6,2.20E-16
+DeltaBwPred + condPMI,-3896926,2593,5186,2.20E-16
