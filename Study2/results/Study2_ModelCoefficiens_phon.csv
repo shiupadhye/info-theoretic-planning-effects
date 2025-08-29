@@ -1,0 +1,11 @@
+Model,term,Predictor,Construct,Beta,SE,statistic,p
+Model with Delta Backward Predictability,unigram_logProb,Unigram Predictability,Frequency,0.598936933,0.212351675,2.820495451,0.004794955
+Model with Delta Backward Predictability,infillFw_logProb,Forward Predictability,Forward Predictability,0.062865055,0.22444401,0.280092372,0.779406637
+Model with Delta Backward Predictability,deltaBwPred,Delta Backward Predictability,Backward Planning,-1.049122318,1.431958261,-0.732648672,0.463772737
+Model with Delta Backward Predictability,NoisySemDist,Semantic Distance,Communicative Reward,-5.010462742,4.017675238,-1.247104966,0.212359012
+Model with Delta Backward Predictability,NoisyPhonDist,Phonetic Distance,Communicative Reward,-0.182864793,0.397118883,-0.460478714,0.645172647
+Model with condPMI,unigram_logProb,Unigram Predictability,Frequency,0.591813287,0.212085689,2.790444234,0.005263577
+Model with condPMI,infillFw_logProb,Forward Predictability,Forward Predictability,0.097881678,0.219412435,0.446108163,0.655519117
+Model with condPMI,condPMI,condPMI,Backward Planning,-0.79105631,2.246162188,-0.352181296,0.724702303
+Model with condPMI,NoisySemDist,Semantic Distance,Communicative Reward,-4.59762776,4.175805802,-1.101015703,0.270889823
+Model with condPMI,NoisyPhonDist,Phonetic Distance,Communicative Reward,-0.18310269,0.398692666,-0.459257734,0.646049095

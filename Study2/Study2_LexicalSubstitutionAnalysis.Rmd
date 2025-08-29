@@ -1,0 +1,735 @@
+---
+title: "Study 2: Predicting Substitution Choice (08/26)"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+library(broom)
+library(tidyverse)
+library(ggpubr)
+library(MuMIn)
+library(ggplot2)
+library(reshape2)
+library(viridis)
+library(lmtest)
+library(doParallel)
+library(patchwork)
+library(relaimpo)
+library(dominanceanalysis)
+```
+
+
+#### Helper functions
+
+```{r}
+save_model_coeffs <- function(models, filename) {
+  model_coeffs <- purrr::map_df(models, broom::tidy, .id = "model")
+  write.csv(model_coeffs, filename, row.names = FALSE)
+}
+```
+
+
+
+```{r}
+scores <- read_csv('data/SWBD_LexSubsAnalysisData.csv')
+```
+
+
+```{r}
+scores <- scores %>%
+  mutate(condPMI = infill_logProb - infillFw_logProb)
+```
+
+```{r}
+colnames(scores)
+```
+
+
+```{r}
+scores <- scores %>%
+  mutate(isProduced = case_when(
+    type == 'error' ~ TRUE,
+    type != 'error' ~ FALSE
+  ))
+```
+
+```{r}
+scores$deltaBwPred = scores$infillBw_logProb - scores$infillFw_logProb
+```
+
+
+```{r}
+lexSubsAnnotated <- read_csv('data/SWBD_lexicalSubstitutions_samePOS_categorized.csv')
+```
+
+```{r}
+scores <- merge(scores,lexSubsAnnotated[,c('subsID','category')],on='subsID')
+```
+
+```{r}
+scores %>%
+  group_by(subsID,type)  %>%
+  count() %>%
+  group_by(subsID) %>%
+  count() %>%
+  filter(n != 3)
+```
+```{r}
+scores <- scores %>%
+  filter(!(subsID %in% c(138, 985)))
+```
+
+
+## Substitution Error Analysis
+
+```{r}
+glm.isProduced.baseline <- glm(isProduced ~ unigram_logProb + infillFw_logProb + NoisySemDist + NoisyPhonDist, family = 'binomial',data=scores)
+summary(glm.isProduced.baseline)
+```
+
+```{r}
+glm.isProduced.deltaBw <- glm(isProduced ~ unigram_logProb + infillFw_logProb + deltaBwPred + NoisySemDist + NoisyPhonDist, family = 'binomial',data=scores)
+summary(glm.isProduced.deltaBw)
+```
+
+
+```{r}
+glm.isProduced.pmi <- glm(isProduced ~ unigram_logProb + infillFw_logProb + condPMI + NoisySemDist + NoisyPhonDist, family = 'binomial',data=scores)
+summary(glm.isProduced.pmi)
+```
+
+
+```{r}
+glm.isProduced.both <- glm(isProduced ~ unigram_logProb + infillFw_logProb + deltaBwPred + condPMI + NoisySemDist + NoisyPhonDist, family = 'binomial',data=scores)
+summary(glm.isProduced.both)
+```
+
+```{r}
+models <- list(m1 = glm.isProduced.baseline, m2 = glm.isProduced.deltaBw, m3 = glm.isProduced.pmi,m4 = glm.isProduced.both)
+```
+
+```{r}
+save_model_coeffs(models, "results/Study2_ModelCoefficients_allCategories.csv")
+```
+
+### Visualization
+
+```{r}
+lexSubsModelCoef <- read_csv('results/Study2_ModelCoefficients_allCategories.csv')
+head(lexSubsModelCoef)
+```
+
+```{r}
+lexSubsModelCoef$significance <- ifelse(lexSubsModelCoef$p < 0.001, "***",
+                            ifelse(lexSubsModelCoef$p < 0.01, "**",
+                                   ifelse(lexSubsModelCoef$p < 0.05, "*", "ns")))
+
+head(lexSubsModelCoef)
+```
+
+```{r}
+lexSubsModelCoef$Predictor <- factor(lexSubsModelCoef$Predictor, levels = c("Unigram Predictability", "Forward Predictability","Semantic Distance","Phonetic Distance","Delta Backward Predictability", "condPMI")) 
+
+lexSubsModelCoef$Construct <- factor(lexSubsModelCoef$Construct, levels = c("Frequency", "Forward Predictability","Communicative Reward", "Backward Planning")) 
+```
+
+```{r}
+lexSubsModelCoef.filtered <- lexSubsModelCoef %>%
+  filter(!(model %in% c("Baseline","Model with both"))) %>%
+  filter(!(model == "Model with Delta Backward Predictability" & Predictor %in% c("condPMI"))) %>%
+  filter(!(model == "Model with condPMI" & Predictor %in% c("Delta Backward Predictability")))
+```
+
+```{r}
+lexSubsModelCoef.filtered$model <- factor(lexSubsModelCoef.filtered$model, levels = c("Model with Delta Backward Predictability", "Model with condPMI")) 
+```
+
+
+```{r fig.width=3}
+lexSubs.colors <- c('#3E8D31','#295C9D','#f89441','#7E629E')
+plt.modelCoeffs.all <- ggplot(lexSubsModelCoef.filtered,aes(x=Predictor,y=Beta,fill=Construct)) +
+  geom_bar(stat = "identity", position = position_dodge(width=0.8)) +
+  scale_fill_manual(values = lexSubs.colors) +  # Using hex colors
+  geom_errorbar(aes(ymin=Beta-SE,ymax=Beta+SE),position = position_dodge(width = 0.8),width=0.2)+
+  geom_text(aes(label = significance, 
+            y = ifelse(Beta > 0, Beta + 0.3, Beta - 0.3)), 
+            size = 3) +
+  facet_wrap(~model,scales = "free_x") +
+  ylab('Model Coefficients') +
+  xlab('Key Predictors') +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),  # x-axis text
+    axis.text.y = element_text(face = "bold", color = "black"),  # y-axis text
+    axis.title.x = element_text(face = "bold", color = "black"),  # x-axis title
+    axis.title.y = element_text(face = "bold", color = "black"),  # y-axis title
+    plot.title = element_text(face = "bold", color = "black"),  # plot title
+    strip.text = element_text(face = "bold", color = "black"))+  # facet labels
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme(plot.margin = margin(20, 5.5, 5.5, 40))  +
+  theme(legend.title = element_text(face = "bold")) +
+  theme(legend.text = element_text(face = "bold"))
+```
+
+
+
+```{r}
+saveRDS(plt.modelCoeffs.all,"plots/rds/Study2_ModelCoefficients_allCategories.rds")
+```
+
+
+### LRT 
+
+```{r}
+lrtest(glm.isProduced.baseline,glm.isProduced.deltaBw)
+```
+```{r}
+lrtest(glm.isProduced.baseline,glm.isProduced.pmi)
+```
+```{r}
+lrtest(glm.isProduced.baseline,glm.isProduced.both)
+```
+
+```{r}
+lrtest(glm.isProduced.deltaBw,glm.isProduced.pmi)
+```
+```{r}
+lrtest(glm.isProduced.deltaBw,glm.isProduced.both)
+```
+```{r}
+lrtest(glm.isProduced.pmi,glm.isProduced.both)
+```
+
+```{r}
+LRT.results <- read_csv('results/LRT-results.csv')
+head(LRT.results)
+```
+
+
+```{r}
+# Prepare data
+df <- LRT.results %>%
+  filter(Model != 'Baseline') %>%
+  mutate(
+    Model = factor(Model, levels = c(
+      "condPMI",
+      "DeltaBwPred",
+      "DeltaBwPred + condPMI"
+    )),
+    Model = fct_reorder(Model, DeltaLogLik, .desc = FALSE)  # Best model on the left
+  )
+```
+
+
+```{r}
+pairs <- list(
+  c("condPMI", "DeltaBwPred"),
+  c("condPMI", "DeltaBwPred + condPMI"),
+  c("DeltaBwPred", "DeltaBwPred + condPMI")
+)
+
+top  <- max(df$DeltaLogLik, na.rm = TRUE)
+rng  <- diff(range(df$DeltaLogLik, na.rm = TRUE))
+step <- 0.14 * rng
+
+# push the middle bracket down a bit; top bracket way up
+ypos <- top + c(1.0, 2.0, 3.8) * step   # ← tweak these if needed
+
+plt.LRT <- ggplot(df, aes(Model, DeltaLogLik)) +
+  geom_bar(stat = "identity", fill = "#7E629E", width = 0.7) +
+  ylab(expression(Delta * bold("LogLik"))) +
+  scale_x_discrete(labels = c(
+    "condPMI" = expression(bold("condPMI")),
+    "DeltaBwPred" = expression(Delta * bold("BwPred")),
+    "DeltaBwPred + condPMI" = expression(Delta * bold("BwPred + condPMI"))
+  )) +
+  xlab("Predictor added to baseline model") +
+  theme_classic() +
+  ggsignif::geom_signif(
+    comparisons = list(
+      c("condPMI","DeltaBwPred"),
+      c("condPMI","DeltaBwPred + condPMI"),
+      c("DeltaBwPred","DeltaBwPred + condPMI")
+    ),
+    annotations = c("***","ns","***"),
+    y_position  = ypos,
+    tip_length  = 0.02,     
+    vjust       = -0.25,  
+    textsize    = 4,
+    size        = 0.5
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold")
+  ) +
+  ylim(0,30)
+  #coord_cartesian(ylim = c(0, max(ypos) + 0.6*step))  # headroom
+
+```
+
+
+```{r}
+saveRDS(plt.LRT,"plots/rds/Study2_LRT.rds")
+```
+
+### Fine-grained error analysis
+#### Semantic errors
+```{r}
+sem.error.scores <- scores %>%
+  filter(category == 'semantic')
+```
+
+```{r}
+m.deltaBw.semScores <- glm(isProduced ~ unigram_logProb + infillFw_logProb + deltaBwPred  + NoisySemDist + NoisyPhonDist, family = 'binomial',data=sem.error.scores)
+summary(m.deltaBw.semScores)
+```
+
+```{r}
+m.pmi.semScores <- glm(isProduced ~ unigram_logProb + infillFw_logProb + condPMI  + NoisySemDist + NoisyPhonDist, family = 'binomial',data=sem.error.scores)
+summary(m.pmi.semScores)
+```
+
+```{r}
+sem.models <- list(m1 = m.deltaBw.semScores, m2 = m.pmi.semScores)
+```
+
+```{r}
+save_model_coeffs(sem.models, "results/Study2_ModelCoefficiens_sem.csv")
+```
+
+
+```{r}
+phon.error.scores <- scores %>%
+  filter(category == 'phonological')
+```
+
+
+```{r}
+m.deltaBw.phonScores <- glm(isProduced ~ unigram_logProb + infillFw_logProb + deltaBwPred  + NoisySemDist + NoisyPhonDist, family = 'binomial',data=phon.error.scores)
+summary(m.deltaBw.phonScores)
+```
+
+```{r}
+m.pmi.phonScores <- glm(isProduced ~ unigram_logProb + infillFw_logProb + condPMI  + NoisySemDist + NoisyPhonDist, family = 'binomial',data=phon.error.scores)
+summary(m.pmi.phonScores)
+```
+```{r}
+phon.models <- list(m1 = m.deltaBw.phonScores, m2 = m.pmi.phonScores)
+```
+
+```{r}
+save_model_coeffs(phon.models, "results/Study2_ModelCoefficiens_phon.csv")
+```
+
+```{r}
+ms.error.scores <- scores %>%
+  filter(category == 'morphosyntactic')
+```
+
+
+```{r}
+m.deltaBw.msScores <- glm(isProduced ~ unigram_logProb + infillFw_logProb + deltaBwPred  + NoisySemDist + NoisyPhonDist, family = 'binomial',data=ms.error.scores)
+summary(m.deltaBw.msScores)
+```
+
+```{r}
+m.pmi.msScores <- glm(isProduced ~ unigram_logProb + infillFw_logProb + condPMI  + NoisySemDist + NoisyPhonDist, family = 'binomial',data=ms.error.scores)
+summary(m.pmi.msScores)
+```
+
+```{r}
+ms.models <- list(m1 = m.deltaBw.msScores, m2 = m.pmi.msScores)
+```
+
+```{r}
+save_model_coeffs(ms.models, "results/Study2_ModelCoefficiens_ms.csv")
+```
+
+```{r}
+mixed.error.scores <- scores %>%
+  filter(category == 'mixed')
+```
+
+```{r}
+m.deltaBw.mixedScores <- glm(isProduced ~ unigram_logProb + infillFw_logProb + deltaBwPred  + NoisySemDist + NoisyPhonDist, family = 'binomial',data=mixed.error.scores)
+summary(m.deltaBw.mixedScores)
+```
+
+```{r}
+m.pmi.mixedScores<- glm(isProduced ~ unigram_logProb + infillFw_logProb + condPMI  + NoisySemDist + NoisyPhonDist, family = 'binomial',data=mixed.error.scores)
+summary(m.pmi.mixedScores)
+```
+
+```{r}
+mixed.models <- list(m1 = m.deltaBw.mixedScores, m2 = m.pmi.msScores)
+```
+
+```{r}
+save_model_coeffs(mixed.models, "results/Study2_ModelCoefficiens_mixed.csv")
+```
+
+### visualization
+```{r}
+lexSubsModelCoef.sem <- read_csv('Study2_ModelCoefficiens_sem.csv')
+head(lexSubsModelCoef.sem)
+```
+
+```{r}
+lexSubsModelCoef.sem$significance <- ifelse(lexSubsModelCoef.sem$p < 0.001, "***",
+                            ifelse(lexSubsModelCoef.sem$p < 0.01, "**",
+                                   ifelse(lexSubsModelCoef.sem$p < 0.05, "*", "")))
+
+head(lexSubsModelCoef.sem)
+```
+```{r}
+lexSubsModelCoef.sem$Predictor <- factor(lexSubsModelCoef.sem$Predictor, levels = c("Unigram Predictability", "Forward Predictability","Semantic Distance","Phonetic Distance","Delta Backward Predictability", "condPMI")) 
+
+lexSubsModelCoef.sem$Construct <- factor(lexSubsModelCoef.sem$Construct, levels = c("Frequency", "Forward Predictability","Communicative Reward", "Backward Planning")) 
+```
+
+```{r}
+lexSubsModelCoef.sem.filtered <- lexSubsModelCoef.sem %>%
+  filter(!(Model %in% c("Baseline","Model with both"))) %>%
+  filter(!(Model == "Model with Delta Backward Predictability" & Predictor %in% c("condPMI"))) %>%
+  filter(!(Model == "Model with condPMI" & Predictor %in% c("Delta Backward Predictability")))
+```
+
+```{r}
+lexSubsModelCoef.sem.filtered$Model <- factor(lexSubsModelCoef.sem.filtered$Model, levels = c("Model with Delta Backward Predictability", "Model with condPMI")) 
+```
+
+```{r fig.width=3}
+lexSubs.colors <- c('#3E8D31','#295C9D','#f89441','#7E629E')
+plt.modelCoeffs.sem <- ggplot(lexSubsModelCoef.sem.filtered,aes(x=Predictor,y=Beta,fill=Construct)) +
+  geom_bar(stat = "identity", position = position_dodge(width=0.8)) +
+  scale_fill_manual(values = lexSubs.colors) +  # Using hex colors
+  geom_errorbar(aes(ymin=Beta-SE,ymax=Beta+SE),position = position_dodge(width = 0.8),width=0.2)+
+  geom_text(aes(label = significance, 
+            y = ifelse(Beta > 0, Beta + 0.3, Beta - 0.3)), 
+            size = 3) +
+  facet_wrap(~Model,scales = "free_x") +
+  ylab('Model Coefficients') +
+  xlab('Key Predictors') +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),  # x-axis text
+    axis.text.y = element_text(face = "bold", color = "black"),  # y-axis text
+    axis.title.x = element_text(face = "bold", color = "black"),  # x-axis title
+    axis.title.y = element_text(face = "bold", color = "black"),  # y-axis title
+    plot.title = element_text(face = "bold", color = "black"),  # plot title
+    strip.text = element_text(face = "bold", color = "black"))+  # facet labels
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme(plot.margin = margin(20, 5.5, 5.5, 40))  +
+   theme(legend.position = "none") +
+  theme(legend.title = element_text(face = "bold")) +
+  theme(legend.text = element_text(face = "bold")) +
+  ggtitle("Semantic Errors")
+```
+
+```{r}
+plt.modelCoeffs.sem
+```
+```{r}
+saveRDS(plt.modelCoeffs.sem,"Study2_ModelCoefficients_sem.rds")
+```
+
+##### Phon
+```{r}
+lexSubsModelCoef.phon <- read_csv('Study2_ModelCoefficiens_phon.csv')
+head(lexSubsModelCoef.phon)
+```
+
+```{r}
+lexSubsModelCoef.phon$significance <- ifelse(lexSubsModelCoef.phon$p < 0.001, "***",
+                            ifelse(lexSubsModelCoef.phon$p < 0.01, "**",
+                                   ifelse(lexSubsModelCoef.phon$p < 0.05, "*", "")))
+
+head(lexSubsModelCoef.phon)
+```
+
+```{r}
+lexSubsModelCoef.phon$Predictor <- factor(lexSubsModelCoef.phon$Predictor, levels = c("Unigram Predictability", "Forward Predictability","Semantic Distance","Phonetic Distance","Delta Backward Predictability", "condPMI")) 
+
+lexSubsModelCoef.phon$Construct <- factor(lexSubsModelCoef.phon$Construct, levels = c("Frequency", "Forward Predictability","Communicative Reward", "Backward Planning")) 
+```
+
+```{r}
+lexSubsModelCoef.phon.filtered <- lexSubsModelCoef.phon %>%
+  filter(!(Model %in% c("Baseline","Model with both"))) %>%
+  filter(!(Model == "Model with Delta Backward Predictability" & Predictor %in% c("condPMI"))) %>%
+  filter(!(Model == "Model with condPMI" & Predictor %in% c("Delta Backward Predictability")))
+```
+
+```{r}
+lexSubsModelCoef.phon.filtered$Model <- factor(lexSubsModelCoef.phon.filtered$Model, levels = c("Model with Delta Backward Predictability", "Model with condPMI")) 
+```
+
+```{r fig.width=3}
+lexSubs.colors <- c('#3E8D31','#295C9D','#f89441','#7E629E')
+plt.modelCoeffs.phon <- ggplot(lexSubsModelCoef.phon.filtered,aes(x=Predictor,y=Beta,fill=Construct)) +
+  geom_bar(stat = "identity", position = position_dodge(width=0.8)) +
+  scale_fill_manual(values = lexSubs.colors) +  # Using hex colors
+  geom_errorbar(aes(ymin=Beta-SE,ymax=Beta+SE),position = position_dodge(width = 0.8),width=0.2)+
+  geom_text(aes(label = significance, 
+            y = ifelse(Beta > 0, Beta + 0.3, Beta - 0.3)), 
+            size = 3) +
+  facet_wrap(~Model,scales = "free_x") +
+  ylab('Model Coefficients') +
+  xlab('Key Predictors') +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),  # x-axis text
+    axis.text.y = element_text(face = "bold", color = "black"),  # y-axis text
+    axis.title.x = element_text(face = "bold", color = "black"),  # x-axis title
+    axis.title.y = element_text(face = "bold", color = "black"),  # y-axis title
+    plot.title = element_text(face = "bold", color = "black"),  # plot title
+    strip.text = element_text(face = "bold", color = "black"))+  # facet labels
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme(plot.margin = margin(20, 5.5, 5.5, 40))  +
+  theme(legend.position = "none") +
+  theme(legend.title = element_text(face = "bold")) +
+  theme(legend.text = element_text(face = "bold")) +
+  ggtitle("Phonological Errors")
+```
+
+```{r}
+plt.modelCoeffs.phon
+```
+
+```{r}
+saveRDS(plt.modelCoeffs.phon,"plots/rds/Study2_ModelCoefficients_phon.rds")
+```
+
+### morphosyntactic
+```{r}
+lexSubsModelCoef.ms <- read_csv('results/Study2_ModelCoefficiens_ms.csv')
+head(lexSubsModelCoef.ms)
+```
+
+```{r}
+lexSubsModelCoef.ms$significance <- ifelse(lexSubsModelCoef.ms$p < 0.001, "***",
+                            ifelse(lexSubsModelCoef.ms$p < 0.01, "**",
+                                   ifelse(lexSubsModelCoef.ms$p < 0.05, "*", "")))
+
+head(lexSubsModelCoef.ms)
+```
+
+```{r}
+lexSubsModelCoef.ms$Predictor <- factor(lexSubsModelCoef.ms$Predictor, levels = c("Unigram Predictability", "Forward Predictability","Semantic Distance","Phonetic Distance","Delta Backward Predictability", "condPMI")) 
+
+lexSubsModelCoef.ms$Construct <- factor(lexSubsModelCoef.ms$Construct, levels = c("Frequency", "Forward Predictability","Communicative Reward", "Backward Planning")) 
+```
+
+```{r}
+lexSubsModelCoef.ms.filtered <- lexSubsModelCoef.ms %>%
+  filter(!(Model %in% c("Baseline","Model with both"))) %>%
+  filter(!(Model == "Model with Delta Backward Predictability" & Predictor %in% c("condPMI"))) %>%
+  filter(!(Model == "Model with condPMI" & Predictor %in% c("Delta Backward Predictability")))
+```
+
+```{r}
+lexSubsModelCoef.ms.filtered$Model <- factor(lexSubsModelCoef.ms.filtered$Model, levels = c("Model with Delta Backward Predictability", "Model with condPMI")) 
+```
+
+```{r fig.width=3}
+lexSubs.colors <- c('#3E8D31','#295C9D','#f89441','#7E629E')
+plt.modelCoeffs.ms <- ggplot(lexSubsModelCoef.ms.filtered,aes(x=Predictor,y=Beta,fill=Construct)) +
+  geom_bar(stat = "identity", position = position_dodge(width=0.8)) +
+  scale_fill_manual(values = lexSubs.colors) +  # Using hex colors
+  geom_errorbar(aes(ymin=Beta-SE,ymax=Beta+SE),position = position_dodge(width = 0.8),width=0.2)+
+  geom_text(aes(label = significance, 
+            y = ifelse(Beta > 0, Beta + 0.3, Beta - 0.3)), 
+            size = 3) +
+  facet_wrap(~Model,scales = "free_x") +
+  ylab('Model Coefficients') +
+  xlab('Key Predictors') +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),  # x-axis text
+    axis.text.y = element_text(face = "bold", color = "black"),  # y-axis text
+    axis.title.x = element_text(face = "bold", color = "black"),  # x-axis title
+    axis.title.y = element_text(face = "bold", color = "black"),  # y-axis title
+    plot.title = element_text(face = "bold", color = "black"),  # plot title
+    strip.text = element_text(face = "bold", color = "black"))+  # facet labels
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme(plot.margin = margin(20, 5.5, 5.5, 40))  +
+  theme(legend.position = "none") +
+  theme(legend.title = element_text(face = "bold")) +
+  theme(legend.text = element_text(face = "bold")) +
+  ggtitle("Morphosyntactic Errors")
+```
+
+```{r}
+plt.modelCoeffs.ms
+```
+
+```{r}
+saveRDS(plt.modelCoeffs.ms,"plots/rds/Study2_ModelCoefficients_ms.rds")
+```
+
+
+```{r}
+lexSubsModelCoef.mixed <- read_csv('results/Study2_ModelCoefficiens_mixed.csv')
+head(lexSubsModelCoef.mixed)
+```
+
+```{r}
+lexSubsModelCoef.mixed$significance <- ifelse(lexSubsModelCoef.mixed$p < 0.001, "***",
+                            ifelse(lexSubsModelCoef.mixed$p < 0.01, "**",
+                                   ifelse(lexSubsModelCoef.mixed$p < 0.05, "*", "")))
+
+head(lexSubsModelCoef.mixed)
+```
+
+```{r}
+lexSubsModelCoef.mixed$Predictor <- factor(lexSubsModelCoef.mixed$Predictor, levels = c("Unigram Predictability", "Forward Predictability","Semantic Distance","Phonetic Distance","Delta Backward Predictability", "condPMI")) 
+
+lexSubsModelCoef.mixed$Construct <- factor(lexSubsModelCoef.mixed$Construct, levels = c("Frequency", "Forward Predictability","Communicative Reward", "Backward Planning")) 
+```
+
+```{r}
+lexSubsModelCoef.mixed.filtered <- lexSubsModelCoef.mixed %>%
+  filter(!(Model %in% c("Baseline","Model with both"))) %>%
+  filter(!(Model == "Model with Delta Backward Predictability" & Predictor %in% c("condPMI"))) %>%
+  filter(!(Model == "Model with condPMI" & Predictor %in% c("Delta Backward Predictability")))
+```
+
+```{r}
+lexSubsModelCoef.mixed.filtered$Model <- factor(lexSubsModelCoef.mixed.filtered$Model, levels = c("Model with Delta Backward Predictability", "Model with condPMI")) 
+```
+
+```{r fig.width=3}
+lexSubs.colors <- c('#3E8D31','#295C9D','#f89441','#7E629E')
+plt.modelCoeffs.mixed <- ggplot(lexSubsModelCoef.mixed.filtered,aes(x=Predictor,y=Beta,fill=Construct)) +
+  geom_bar(stat = "identity", position = position_dodge(width=0.8)) +
+  scale_fill_manual(values = lexSubs.colors) +  # Using hex colors
+  geom_errorbar(aes(ymin=Beta-SE,ymax=Beta+SE),position = position_dodge(width = 0.8),width=0.2)+
+  geom_text(aes(label = significance, 
+            y = ifelse(Beta > 0, Beta + 0.3, Beta - 0.3)), 
+            size = 3) +
+  facet_wrap(~Model,scales = "free_x") +
+  ylab('Model Coefficients') +
+  xlab('Key Predictors') +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold", color = "black"),  # x-axis text
+    axis.text.y = element_text(face = "bold", color = "black"),  # y-axis text
+    axis.title.x = element_text(face = "bold", color = "black"),  # x-axis title
+    axis.title.y = element_text(face = "bold", color = "black"),  # y-axis title
+    plot.title = element_text(face = "bold", color = "black"),  # plot title
+    strip.text = element_text(face = "bold", color = "black"))+  # facet labels
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme(legend.position = "none") +
+  theme(plot.margin = margin(20, 5.5, 5.5, 40))  +
+  theme(legend.title = element_text(face = "bold")) +
+  theme(legend.text = element_text(face = "bold")) +
+  ggtitle("Mixed Errors")
+```
+
+```{r}
+plt.modelCoeffs.mixed
+```
+
+```{r}
+saveRDS(plt.modelCoeffs.mixed,"plots/rds/Study2_ModelCoefficients_mixed.rds")
+```
+
+
+### Plot trade-off
+```{r}
+data <- read_csv('ByUttrPreds_full.csv')
+```
+
+```{r}
+data <- data %>%
+  mutate(isProduced = case_when(
+    type == 'error' ~ TRUE,
+    type != 'error' ~ FALSE
+  ))
+```
+
+```{r}
+colnames(data)
+```
+
+
+```{r}
+summary.isProduced <- data %>%
+  dplyr::select(subsID,isProduced,fwPred,pmiFP) %>%
+  group_by(subsID,isProduced) %>%
+  summarise(mean_fwPred = mean(fwPred),
+            mean_pmiFP = mean(pmiFP))
+```
+
+```{r}
+colors <- c('#5F9EA0','#FF0000')
+ggplot(summary.isProduced,aes(x=mean_fwPred,y=mean_pmiFP,color=isProduced)) +
+  geom_point(alpha=0.5) +
+  theme_classic() +
+  stat_ellipse() +
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  ylab("PMI") +
+  xlab("Forward Predictability \n (Log-transformed)")
+```
+
+```{r}
+summary.type <- data %>%
+  dplyr::select(subsID,type,fwPred,pmiFP) %>%
+  group_by(subsID,type) %>%
+  summarise(mean_fwPred = mean(fwPred),
+            mean_pmiFP = mean(pmiFP))
+```
+
+```{r}
+summary.type <- summary.type %>%
+  rename(Label = "type")
+```
+
+```{r}
+summary.type <- summary.type %>%
+  mutate(Label = case_when(
+    Label == 'error' ~ 'Error',
+    Label == 'alternate' ~ 'Alternative',
+    Label == 'repair' ~ 'Target'
+  ))
+```
+
+
+```{r}
+summary.type$Label <- factor(summary.type$Label,levels = c('Alternative','Error','Target'))
+```
+
+
+```{r}
+colors <- c('#5F9EA0','#FF0000','#00CD00')
+p3 <- ggplot(summary.type,aes(x=mean_fwPred,y=mean_pmiFP,color=Label,fill=Label)) +
+  geom_point(alpha=0.2) +
+  stat_ellipse(geom = "polygon",alpha=0.5) +
+  ylab("PMI") +
+  xlab("Forward Predictability \n (Log-transformed)") +
+  scale_color_manual(values = colors) +
+  scale_fill_manual(values = colors) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(face = "bold", color = "black"),  # x-axis text
+    axis.text.y = element_text(face = "bold", color = "black"),  # y-axis text
+    axis.title.x = element_text(face = "bold", color = "black"),  # x-axis title
+    axis.title.y = element_text(face = "bold", color = "black"),  # y-axis title
+    plot.title = element_text(face = "bold", color = "black"),  # plot title
+    strip.text = element_text(face = "bold", color = "black"),
+    legend.title = element_text(face = "bold", color = "black")) +
+  theme(legend.text = element_text(face = "bold")) +
+  theme(plot.margin = margin(20, 5.5, 5.5, 40))
+```
+
+```{r fig.width=5, fig.height=2 }
+p1 + p3 + plot_layout(widths = c(3.5,2))
+```
+
+
+

@@ -1,0 +1,5 @@
+﻿Model,LogLik,DeltaLogLik,p_value
+Baseline,-4772.899,0,0
+DeltaBwPred,-4759.12,13.779,1.37E-07
+condPMI,-4752.066,20.833,1.37E-10
+DeltaBwPred + condPMI,-4751.24,21.659,4.46E-10
