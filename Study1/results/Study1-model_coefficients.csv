@@ -13,13 +13,13 @@ Gender:M,sexM,Control,-0.010845813,0.001506023,0.00E+00,Model with DeltaBwPred
 Unigram Predictability,unigram_logProb,Unigram Predictability,-0.023358842,9.09E-05,0,Model with DeltaBwPred
 Forward Predictability,infillFw_logProb,Forward Predictability,-0.005379892,8.82E-05,0,Model with DeltaBwPred
 DeltaBwPred,deltaBwPred,Planning,-0.022440056,0.000313442,0,Model with DeltaBwPred
-Word Length,word_len,Control,0.083984106,0.000290154,0,Model with condPMI
-Speech Rate,uttrSR,Control,-0.026795854,0.000122038,0,Model with condPMI
-Age,age,Control,0.000221892,7.00E-05,0.001671715,Model with condPMI
-Gender:M,sexM,Control,-0.010089673,0.00148729,0.00E+00,Model with condPMI
-Unigram Predictability,unigram_logProb,Unigram Predictability,-0.023758646,9.10E-05,0,Model with condPMI
-Forward Predictability,infillFw_logProb,Forward Predictability,-0.004499989,8.74E-05,0,Model with condPMI
-condPMI,condPMI,Planning,-0.016355175,0.000487775,0.00E+00,Model with condPMI
+Word Length,word_len,Control,0.083984106,0.000290154,0,Model with conditional PMI
+Speech Rate,uttrSR,Control,-0.026795854,0.000122038,0,Model with conditional PMI
+Age,age,Control,0.000221892,7.00E-05,0.001671715,Model with conditional PMI
+Gender:M,sexM,Control,-0.010089673,0.00148729,0.00E+00,Model with conditional PMI
+Unigram Predictability,unigram_logProb,Unigram Predictability,-0.023758646,9.10E-05,0,Model with conditional PMI
+Forward Predictability,infillFw_logProb,Forward Predictability,-0.004499989,8.74E-05,0,Model with conditional PMI
+conditional PMI,condPMI,Planning,-0.016355175,0.000487775,0.00E+00,Model with conditional PMI
 Word Length,word_len,Control,0.084139723,0.000289227,0,Model with both
 Speech Rate,uttrSR,Control,-0.026387811,0.000121821,0,Model with both
 Age,age,Control,0.000208868,7.09E-05,0.003440667,Model with both
@@ -27,4 +27,4 @@ Gender:M,sexM,Control,-0.010909525,0.00150592,0.00E+00,Model with both
 Unigram Predictability,unigram_logProb,Unigram Predictability,-0.023368599,9.09E-05,0,Model with both
 Forward Predictability,infillFw_logProb,Forward Predictability,-0.005384874,8.82E-05,0,Model with both
 DeltaBwPred,deltaBwPred,Planning,-0.02441666,0.000382456,0,Model with both
-PMI,condPMI,Planning,0.005350411,0.00059329,0.00E+00,Model with both
+conditional PMI,condPMI,Planning,0.005350411,0.00059329,0.00E+00,Model with both
