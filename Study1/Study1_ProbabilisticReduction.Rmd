@@ -127,20 +127,21 @@ head(durCoefData)
 ```{r}
 durCoefData$Construct <- factor(durCoefData$Construct, levels = c("Unigram Predictability", "Forward Predictability","Planning")) 
 
-durCoefData$Predictor <- factor(durCoefData$Predictor, levels = c("Unigram Predictability", "Forward Predictability","Backward Predictability", "DeltaBwPred", "condPMI")) 
+durCoefData$Predictor <- factor(durCoefData$Predictor, levels = c("Unigram Predictability", "Forward Predictability","Backward Predictability", "DeltaBwPred", "conditional PMI")) 
 ```
 
 ```{r}
 durCoefData.filtered <- durCoefData %>%
   filter(Model != "Model with both") %>%
-  filter(Model != "Model with Backward Predictability") %>%
-  filter(!(Model == "Model with Backward Predictability" & Predictor %in% c("condPMI", "DeltaBwPred"))) %>%
-  filter(!(Model == "Model with DeltaBwPred" & Predictor %in% c("Backward Predictability", "condPMI"))) %>%
-  filter(!(Model == "Model with condPMI" & Predictor %in% c("Backward Predictability", "DeltaBwPred")))
+  #filter(Model != "Model with Backward Predictability") %>%
+  #filter(Model != "Model with conditional PMI") %>%
+  filter(!(Model == "Model with Backward Predictability" & Predictor %in% c("conditional PMI", "DeltaBwPred"))) %>%
+  filter(!(Model == "Model with DeltaBwPred" & Predictor %in% c("Backward Predictability", "conditional PMI"))) %>%
+  filter(!(Model == "Model with conditional PMI" & Predictor %in% c("Backward Predictability", "DeltaBwPred")))
 ```
 
 ```{r}
-durCoefData.filtered$Model <- factor(durCoefData.filtered$Model, levels = c("Model with DeltaBwPred","Model with condPMI")) 
+durCoefData.filtered$Model <- factor(durCoefData.filtered$Model, levels = c("Model with Backward Predictability","Model with DeltaBwPred","Model with conditional PMI")) 
 ```
 
 
@@ -204,11 +205,13 @@ head(LRT.results)
 # Prepare data
 df <- LRT.results %>%
   filter(Model != 'Baseline') %>%
+  #filter(Model != 'conditional PMI') %>%
   mutate(
     Model = factor(Model, levels = c(
-      "condPMI",
+      "Backward Predictability",
+      "conditional PMI",
       "DeltaBwPred",
-      "DeltaBwPred + condPMI"
+      "DeltaBwPred + conditional PMI"
     )),
     Model = fct_reorder(Model, DeltaLogLik, .desc = FALSE)  # Best model on the left
   )
@@ -217,9 +220,10 @@ df <- LRT.results %>%
 ```{r}
 # Pairwise comparisons
 comparisons <- list(
-  c("DeltaBwPred", "condPMI"),
-  c("DeltaBwPred", "DeltaBwPred + condPMI"),
-  c("condPMI", "DeltaBwPred + condPMI")
+  c("Backward Predictability", "DeltaBwPred"),
+  c("DeltaBwPred", "conditional PMI"),
+  c("DeltaBwPred", "DeltaBwPred + conditional PMI"),
+  c("conditional PMI", "DeltaBwPred + conditional PMI")
 )
 
 # Compute dynamic y-positions as a percentage of the max DLL
@@ -236,16 +240,17 @@ plt.modelComp <- ggplot(df, aes(x = Model, y = DeltaLogLik)) +
   
   geom_signif(
     comparisons = comparisons,
-    annotations = c("***","***","***"),
+    annotations = c("ns","***","***","***"),
     y_position = y_positions,
     tip_length = 0.02,
     textsize = 5,
     size = 0.8
   ) +
    scale_x_discrete(labels = c(
-    "condPMI" = expression(bold("condPMI")),
+    "Backward Predictability" = expression(bold("Backwaqrd Predictability")),
+    "conditional PMI" = expression(bold("conditional PMI")),
     "DeltaBwPred" = expression(Delta * bold("BwPred")),
-    "DeltaBwPred + condPMI" = expression(Delta * bold("BwPred + condPMI"))
+    "DeltaBwPred + conditional PMI" = expression(Delta * bold("BwPred + conditional PMI"))
   )) +
   theme_classic() +
   theme(
@@ -261,11 +266,68 @@ plt.modelComp <- ggplot(df, aes(x = Model, y = DeltaLogLik)) +
 plt.modelComp
 ```
 
+
 ```{r}
-plt.combined <- plt.modelCoeffs + plt.modelComp + plot_layout(widths = c(2, 1))
-ggsave("Study1_ModelCoeffs&LRT.png",plt.combined , width = 12, height = 5, dpi = 300)
+df.bwOnly <- LRT.results %>%
+  filter(Model != 'Baseline') %>%
+  filter(Model != 'conditional PMI') %>%
+  filter(Model != 'DeltaBwPred + conditional PMI') %>%
+  mutate(
+    Model = factor(Model, levels = c(
+      "Backward Predictability",
+      "DeltaBwPred"
+    )),
+    Model = fct_reorder(Model, DeltaLogLik, .desc = FALSE)  # Best model on the left
+  )
 ```
 
+
+```{r}
+# Pairwise comparisons
+comparisons <- list(
+  c("Backward Predictability", "DeltaBwPred"))
+
+# Compute dynamic y-positions as a percentage of the max DLL
+max_height <- max(df$DeltaLogLik)
+spacing <- max_height * 0.3  # 5% of max for spacing
+y_positions <- max_height + seq(spacing, by = spacing, length.out = length(comparisons))
+
+# Plot
+plt.modelComp.backwardOnly <- ggplot(df.bwOnly, aes(x = Model, y = DeltaLogLik)) +
+  geom_bar(stat = "identity", fill = '#7E629E', width = 0.7) +
+  ylab(expression(Delta * bold("LogLik"))) +
+  xlab("Predictor added to baseline model") +
+  ylim(0,5500) +
+  
+  geom_signif(
+    comparisons = comparisons,
+    annotations = c("ns"),
+    y_position = y_positions,
+    tip_length = 0.02,
+    textsize = 5,
+    size = 0.8
+  ) +
+   scale_x_discrete(labels = c(
+    "Backward Predictability" = expression(bold("Backward Predictability")),
+    "DeltaBwPred" = expression(Delta * bold("BwPred"))
+  )) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, face = "bold"),
+    axis.text.y = element_text(face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold")
+  )
+```
+
+```{r}
+plt.modelComp.backwardOnly
+```
+
+```{r}
+plt.combined <- plt.modelCoeffs + plt.modelComp + plot_layout(widths = c(2, 1))
+ggsave("plots/Study1_ModelCoeffs&LRT_updated.png",plt.combined , width = 12, height = 5, dpi = 300)
+```
 
 
 
