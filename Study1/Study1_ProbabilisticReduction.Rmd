@@ -1,5 +1,5 @@
 ---
-title: "Probabilistic Reduction (08/29/25)"
+title: "Duration Analysis (Last modified: 09/06/25)"
 output:
   pdf_document: default
   html_notebook: default
@@ -84,6 +84,7 @@ summary(m.both)
 ```{r}
 lrtest(m.baseline,m.deltaBwPred)
 ```
+
 ```{r}
 lrtest(m.baseline,m.condPMI)
 ```
@@ -144,7 +145,7 @@ durCoefData.filtered$Model <- factor(durCoefData.filtered$Model, levels = c("Mod
 
 
 ```{r}
-dur.colors <- c('#3E8D31','#C23F79','#7E629E')
+dur.colors <- c('#3E8D31','#295C9D','#7E629E')
 plt.modelCoeffs <- ggplot(durCoefData.filtered,aes(x=Predictor,y=Beta,fill=Construct)) +
   geom_bar(stat = "identity", position = position_dodge(width=0.8)) +
   scale_fill_manual(values = dur.colors) +  # Using hex colors
