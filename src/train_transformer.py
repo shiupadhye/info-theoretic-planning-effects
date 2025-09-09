@@ -22,7 +22,7 @@ from transformers import (
 
 context_length = 1024
 
-# load tokenizer
+# load custom tokenizer
 tokenizer_dir = 'tokenizer'
 tokenizer_pt = "candor_tokenizer.json"
 tokenizer_path = os.path.join(tokenizer_dir,tokenizer_pt)
@@ -36,15 +36,21 @@ tokenizer = PreTrainedTokenizerFast(
         eos_token = '<eos>')
 
 # load dataset
+# ROOT directory with train and valid files
 ROOT = ''
-train_file = 'CANDOR/model_data/candor_fim0.5.txt'
+# path to training file
+train_file = 'CANDOR/model_data/candor_fim0.5.txt' 
+# path to test file
 valid_file = 'SWBD/SWBDTest_fim0.5.txt'
 train_filepath = os.path.join(ROOT,train_file)
 valid_filepath = os.path.join(ROOT,valid_file)
 
+
+# initiate dataset object
 raw_dataset = datasets.load_dataset('text', data_files={'train': train_file,'valid':valid_file})
 
 
+# helper function for tokenization
 def tokenize(element):
     outputs = tokenizer(
         element["text"],
@@ -67,10 +73,8 @@ data_collator = DataCollatorForLanguageModeling(
 # Tokenize datasets
 tokenized_datasets = raw_dataset.map(tokenize, batched=True, remove_columns=raw_dataset["train"].column_names)
 
-# load LLM
+# define gpt2 config
 config = AutoConfig.from_pretrained(
-        #"hf-internal-testing/tiny-random-gptj",
-        #"EleutherAI/gpt-neo-125M",
         "gpt2",
         vocab_size=len(tokenizer),
         n_ctx=context_length,
@@ -95,10 +99,10 @@ training_args = TrainingArguments(
     per_device_eval_batch_size=4,
 )
 
-#model = GPTNeoForCausalLM(config)
+
+# initialize model architecture without pretrained weights
 model = GPT2LMHeadModel(config)
-#model = AutoModelForCausalLM.from_config(config)
-#model.resize_token_embeddings(len(tokenizer))
+
 
 trainer = Trainer(
     model=model,

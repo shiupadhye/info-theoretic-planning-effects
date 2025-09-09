@@ -15,8 +15,10 @@ from tokenizers import (
 
 from transformers import PreTrainedTokenizerFast
 
+# ROOT directory containing training data
 ROOT = 'CANDOR/tokenizer_data'
 train_file = 'candor.txt'
+# OUTPUT directory for tokenizer
 tokenizer_dir = 'tokenizer'
 tokenizer_id = 'candor_tokenizer.json'
 
@@ -24,13 +26,14 @@ train_filepath = os.path.join(ROOT,train_file)
 
 raw_dataset = datasets.load_dataset('text',data_files={'train': train_filepath})
 
+SEQ_LEN = 1000
 def get_training_corpus():
     dataset = raw_dataset['train']
-    for start_idx in range(0, len(dataset), 1000):
-        samples = dataset[start_idx : start_idx + 1000]
+    for start_idx in range(0, len(dataset), SEQ_LEN):
+        samples = dataset[start_idx : start_idx + SEQ_LEN]
         yield samples['text']
 
-# tokenization
+# CUSTOM-TOKENIZATION PIPELINE
 # define model (Word-level)
 wl_tokenizer = Tokenizer(models.WordLevel())
 # define normalizers
